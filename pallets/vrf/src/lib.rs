@@ -48,7 +48,8 @@ pub mod pallet {
 	/// TODO: needs custom Default implementation?
 	#[derive(Default, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
 	pub struct VrfInput<RelayHash, SlotNumber> {
-		/// TODO: rename to storage_root if parentStorageRoot always changes, even if block is empty
+		/// Relay parent block hash eventually
+		/// TODO: rename to storage_root iff parentStorageRoot always changes, even if block is empty
 		pub relay_block_hash: RelayHash,
 		/// Relay slot number
 		/// received via `well_known_keys::CURRENT_SLOT` on parachain_system::RelayStateProof
@@ -61,12 +62,6 @@ pub mod pallet {
 		fn get_most_recent_relay_block_hash() -> (RelayHash, Weight);
 		/// Returns most recent relay slot number and weight consumed by get
 		fn get_most_recent_relay_slot_number() -> (SlotNumber, Weight);
-	}
-
-	/// This trait tells us if the round changed in the current block
-	/// => new set of authorities to be put in storage
-	pub trait RoundChangedThisBlock {
-		fn round_changed_this_block() -> bool;
 	}
 
 	/// Exposes randomness in this pallet to the runtime
@@ -104,8 +99,6 @@ pub mod pallet {
 		/// Convert account to VRF key, presumably via AuthorMapping instance
 		/// TODO: maybe TryConvert and map to error because fallible conversion
 		type AccountToVrfId: Convert<Self::AccountId, AuthorityId>;
-		/// Whether or not the round changed this block
-		type RoundChanged: RoundChangedThisBlock;
 		/// Get the selected candidate accounts from staking
 		type SelectedCandidates: Get<Vec<Self::AccountId>>;
 	}

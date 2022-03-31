@@ -14,12 +14,12 @@
 // You should have received a copy of the GNU General Public License
 // along with Moonbeam.  If not, see <http://www.gnu.org/licenses/>.
 
-//! Maps Author Ids as used in nimbus consensus layer to account ids as used i nthe runtime.
+//! Maps Author Ids as used in nimbus consensus layer to account ids as used in the runtime.
 //! This should likely be moved to nimbus eventually.
 //!
 //! This pallet maps NimbusId => AccountId which is most useful when using propositional style
 //! queries. This mapping will likely need to go the other way if using exhaustive authority sets.
-//! That could either be a seperate pallet, or this pallet could implement a two-way mapping. But
+//! That could either be a separate pallet, or this pallet could implement a two-way mapping. But
 //! for now it it one-way
 
 #![cfg_attr(not(feature = "std"), no_std)]
@@ -46,10 +46,18 @@ pub mod pallet {
 	use frame_support::traits::{Currency, ReservableCurrency};
 	use frame_system::pallet_prelude::*;
 	use nimbus_primitives::{AccountLookup, NimbusId};
+	use sp_consensus_babe::AuthorityId;
 
 	pub type BalanceOf<T> = <<T as Config>::DepositCurrency as Currency<
 		<T as frame_system::Config>::AccountId,
 	>>::Balance;
+
+	#[derive(Encode, Decode, PartialEq, Eq, Debug, scale_info::TypeInfo)]
+	/// Set of keys
+	pub struct Key {
+		pub nimbus_id: NimbusId,
+		pub vrf_id: AuthorityId,
+	}
 
 	#[derive(Encode, Decode, PartialEq, Eq, Debug, scale_info::TypeInfo)]
 	pub struct RegistrationInfo<AccountId, Balance> {
@@ -61,9 +69,7 @@ pub mod pallet {
 	#[pallet::without_storage_info]
 	pub struct Pallet<T>(PhantomData<T>);
 
-	/// Configuration trait of this pallet. We tightly couple to Parachain Staking in order to
-	/// ensure that only staked accounts can create registrations in the first place. This could be
-	/// generalized.
+	/// Configuration trait of this pallet.
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
 		/// Overarching event type
@@ -202,10 +208,7 @@ pub mod pallet {
 	}
 
 	impl<T: Config> Pallet<T> {
-		pub fn enact_registration(
-			author_id: &NimbusId,
-			account_id: &T::AccountId,
-		) -> DispatchResult {
+		pub fn enact_registration(author_id: &Keys, account_id: &T::AccountId) -> DispatchResult {
 			let deposit = T::DepositAmount::get();
 
 			T::DepositCurrency::reserve(&account_id, deposit)
@@ -229,16 +232,28 @@ pub mod pallet {
 	pub type MappingWithDeposit<T: Config> = StorageMap<
 		_,
 		Blake2_128Concat,
-		NimbusId,
+		Keys,
 		RegistrationInfo<T::AccountId, BalanceOf<T>>,
 		OptionQuery,
 	>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn nimbus_id_of)]
+	/// We maintain a mapping NimbusId to AccountId
+	pub type NimbusIdOf<T: Config> =
+		StorageMap<_, Blake2_128Concat, NimbusId, T::AccountId, OptionQuery>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn account_to_vrf_id)]
+	/// We maintain a mapping AccountIds to VRF AuthorityIds
+	pub type AccountToVrfId<T: Config> =
+		StorageMap<_, Blake2_128Concat, T::AccountId, T::AuthorityId, OptionQuery>;
 
 	#[pallet::genesis_config]
 	/// Genesis config for author mapping pallet
 	pub struct GenesisConfig<T: Config> {
 		/// The associations that should exist at chain genesis
-		pub mappings: Vec<(NimbusId, T::AccountId)>,
+		pub mappings: Vec<(Keys, T::AccountId)>,
 	}
 
 	#[cfg(feature = "std")]
@@ -269,7 +284,7 @@ pub mod pallet {
 		/// A helper function to lookup the account id associated with the given author id. This is
 		/// the primary lookup that this pallet is responsible for.
 		pub fn account_id_of(author_id: &NimbusId) -> Option<T::AccountId> {
-			Self::account_and_deposit_of(author_id).map(|info| info.account)
+			Self::nimbus_id_of(author_id).map(|info| info.account)
 		}
 	}
 }
